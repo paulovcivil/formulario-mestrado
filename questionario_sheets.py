@@ -284,7 +284,7 @@ with st.form(f"form_projeto_{st.session_state['form_version']}", clear_on_submit
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         enviado = st.form_submit_button("📩 Enviar para a planilha")
-   with col_btn2:
+    with col_btn2:
         st.form_submit_button("🗑️ Limpar formulário", on_click=limpar_formulario)
 
 
@@ -344,6 +344,7 @@ if "enviado" in locals() and enviado:
     except Exception as e:
         st.error("❌ Falha ao enviar para a planilha.")
         st.exception(e)
+
 
 
 
