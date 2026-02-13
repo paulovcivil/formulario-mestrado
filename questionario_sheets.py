@@ -1,3 +1,12 @@
+# questionario_sheets.py
+# Streamlit form -> Google Sheets (Service Account via Streamlit Secrets)
+# Adiciona botão explícito "Limpar formulário" (sem quebrar o app / session_state)
+#
+# Deploy: Streamlit Cloud + Secrets:
+#   SPREADSHEET_ID = "..."
+#   WORKSHEET_NAME = "respostas"
+#   [gcp_service_account] ... (service account)
+
 import json
 from datetime import datetime
 
@@ -12,16 +21,39 @@ st.set_page_config(page_title="Formulário Mestrado", layout="wide")
 st.title("📋 Formulário Mestrado - Escola Politécnica USP")
 st.caption("Preencha e clique em **Enviar**. As respostas serão salvas em uma Google Sheet.")
 
-# Você vai definir isso via Secrets (recomendado) ou ambiente.
 SPREADSHEET_ID = st.secrets.get("SPREADSHEET_ID", "")
 WORKSHEET_NAME = st.secrets.get("WORKSHEET_NAME", "respostas")  # nome da aba
+
+# -----------------------------
+# FORM KEYS (para limpar com segurança)
+# -----------------------------
+FORM_KEYS = [
+    "titulo", "orientador", "area", "linha", "vinculo",
+    "problema", "relevancia", "foco", "foco_outro",
+    "delimitacao", "tipo_estudo",
+    "ensaios", "laboratorio", "traco",
+    "software", "modelo_constitutivo", "ml",
+    "artigos_base", "lacuna", "origem_tema", "conexao",
+    "hipotese", "obj_geral", "obj_especificos",
+    "etapas", "pretende",
+    "produtos", "contribuicao",
+    "duracao", "qualif", "artigo",
+    "conversou", "financiamento", "parceria",
+    "formacao", "skills", "futuro_ia",
+]
+
+def limpar_formulario() -> None:
+    """Remove apenas os campos do formulário do session_state (sem quebrar coisas internas do Streamlit)."""
+    for k in FORM_KEYS:
+        if k in st.session_state:
+            del st.session_state[k]
 
 # -----------------------------
 # GOOGLE SHEETS AUTH
 # -----------------------------
 def get_gspread_client():
     """
-    Autentica usando Service Account via st.secrets["gcp_service_account"] (JSON).
+    Autentica usando Service Account via st.secrets["gcp_service_account"] (TOML -> dict).
     """
     if "gcp_service_account" not in st.secrets:
         st.error("Credenciais não configuradas. Falta `gcp_service_account` em st.secrets.")
@@ -37,15 +69,10 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 def ensure_header(ws, header):
-    """
-    Garante que a primeira linha tenha o cabeçalho.
-    """
+    """Garante que a primeira linha tenha o cabeçalho."""
     first_row = ws.row_values(1)
     if not first_row:
         ws.append_row(header, value_input_option="RAW")
-    else:
-        # Se já existe, não altera (evita bagunça)
-        pass
 
 def append_response_to_sheet(payload: dict):
     gc = get_gspread_client()
@@ -62,7 +89,6 @@ def append_response_to_sheet(payload: dict):
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=WORKSHEET_NAME, rows=2000, cols=80)
 
-    # Define colunas (ordem fixa)
     header = [
         "timestamp",
         "titulo",
@@ -102,10 +128,8 @@ def append_response_to_sheet(payload: dict):
         "formacao_contribuicao",
         "skills_contribuicao",
         "futuro_ia",
-        # Extra: salvar o JSON completo (opcional, útil)
         "payload_json",
     ]
-
     ensure_header(ws, header)
 
     row = [
@@ -155,140 +179,159 @@ def append_response_to_sheet(payload: dict):
 # -----------------------------
 # FORM
 # -----------------------------
-with st.form("form_projeto", clear_on_submit=True):
+focos_lista = [
+    "Comportamento mecânico",
+    "Durabilidade",
+    "Modelagem numérica",
+    "Dosagem e microestrutura",
+    "Aplicações estruturais",
+    "Desenvolvimento de metodologia",
+    "Outro",
+]
+
+with st.form("form_projeto", clear_on_submit=False):
     st.header("1️⃣ Identificação Básica")
     c1, c2 = st.columns(2)
     with c1:
-        titulo = st.text_input("1. Título provisório")
-        orientador = st.text_input("2. Nome do orientador")
+        titulo = st.text_input("1. Título provisório", key="titulo")
+        orientador = st.text_input("2. Nome do orientador", key="orientador")
     with c2:
-        area = st.text_input("3. Área de concentração do programa")
-        linha = st.text_input("4. Linha de pesquisa formal do programa")
-    vinculo = st.text_area("5. Projeto maior vinculado (FAPESP/CNPq/parceria)?", height=100)
+        area = st.text_input("3. Área de concentração do programa", key="area")
+        linha = st.text_input("4. Linha de pesquisa formal do programa", key="linha")
+    vinculo = st.text_area("5. Projeto maior vinculado (FAPESP/CNPq/parceria)?", height=100, key="vinculo")
 
     st.header("2️⃣ Contexto Geral da Pesquisa")
-    problema = st.text_area("6. Problema técnico/científico", height=110)
-    relevancia = st.text_area("7. Relevância hoje (aplicação, custo, sustentabilidade...)", height=110)
+    problema = st.text_area("6. Problema técnico/científico", height=110, key="problema")
+    relevancia = st.text_area("7. Relevância hoje (aplicação, custo, sustentabilidade...)", height=110, key="relevancia")
 
-    focos_lista = [
-        "Comportamento mecânico",
-        "Durabilidade",
-        "Modelagem numérica",
-        "Dosagem e microestrutura",
-        "Aplicações estruturais",
-        "Desenvolvimento de metodologia",
-        "Outro",
-    ]
-    foco = st.multiselect("8. Foco principal:", options=focos_lista)
-    foco_outro = st.text_input("Se marcou 'Outro', especifique:")
+    foco = st.multiselect("8. Foco principal:", options=focos_lista, key="foco")
+    foco_outro = st.text_input("Se marcou 'Outro', especifique:", key="foco_outro")
 
     st.header("3️⃣ Delimitação Técnica")
-    delimitacao = st.text_area("9. Delimitação técnica", height=120)
-    tipo_estudo = st.radio("10. O estudo será:", ["Experimental", "Numérico", "Teórico", "Experimental + Numérico"])
+    delimitacao = st.text_area("9. Delimitação técnica", height=120, key="delimitacao")
+    tipo_estudo = st.radio(
+        "10. O estudo será:",
+        ["Experimental", "Numérico", "Teórico", "Experimental + Numérico"],
+        key="tipo_estudo",
+    )
 
     st.subheader("Parte experimental")
-    ensaios = st.text_area("11a. Ensaios pretendidos", height=90)
-    laboratorio = st.text_input("11b. Laboratório disponível (qual)?")
-    traco = st.text_input("11c. Traço UHPFRC definido? (sim/não + detalhes)")
+    ensaios = st.text_area("11a. Ensaios pretendidos", height=90, key="ensaios")
+    laboratorio = st.text_input("11b. Laboratório disponível (qual)?", key="laboratorio")
+    traco = st.text_input("11c. Traço UHPFRC definido? (sim/não + detalhes)", key="traco")
 
     st.subheader("Parte numérica")
-    software = st.text_input("12a. Software(s) (ABAQUS/ANSYS/OpenSees/código próprio...)")
-    modelo_constitutivo = st.text_input("12b. Modelo constitutivo? (sim/não + ideia)")
-    ml = st.text_input("12c. Machine learning? (sim/não + onde faria sentido)")
+    software = st.text_input("12a. Software(s) (ABAQUS/ANSYS/OpenSees/código próprio...)", key="software")
+    modelo_constitutivo = st.text_input("12b. Modelo constitutivo? (sim/não + ideia)", key="modelo_constitutivo")
+    ml = st.text_input("12c. Machine learning? (sim/não + onde faria sentido)", key="ml")
 
     st.header("4️⃣ Estado da Arte")
-    artigos_base = st.text_area("13. Artigos/referências base", height=110)
-    lacuna = st.text_area("14. Lacuna percebida na literatura", height=110)
+    artigos_base = st.text_area("13. Artigos/referências base", height=110, key="artigos_base")
+    lacuna = st.text_area("14. Lacuna percebida na literatura", height=110, key="lacuna")
     origem_tema = st.radio(
         "15. Seu trabalho será:",
-        ["Evolução de pesquisa da graduação", "Continuação de projeto do orientador", "Tema novo dentro do grupo"]
+        ["Evolução de pesquisa da graduação", "Continuação de projeto do orientador", "Tema novo dentro do grupo"],
+        key="origem_tema",
     )
-    conexao = st.text_area("15b. Conexão com pesquisas anteriores", height=110)
+    conexao = st.text_area("15b. Conexão com pesquisas anteriores", height=110, key="conexao")
 
     st.header("5️⃣ Hipóteses e Objetivos")
-    hipotese = st.text_area("16. Hipótese central", height=90)
-    obj_geral = st.text_area("17. Objetivo geral", height=80)
-    obj_especificos = st.text_area("18. Objetivos específicos (3–5)", height=120)
+    hipotese = st.text_area("16. Hipótese central", height=90, key="hipotese")
+    obj_geral = st.text_area("17. Objetivo geral", height=80, key="obj_geral")
+    obj_especificos = st.text_area("18. Objetivos específicos (3–5)", height=120, key="obj_especificos")
 
     st.header("6️⃣ Metodologia")
-    etapas = st.text_area("19. Etapas técnicas do trabalho", height=120)
-    pretende = st.text_area("20. Pretende (paramétrica, comparar, propor modelo, validar norma...)", height=110)
+    etapas = st.text_area("19. Etapas técnicas do trabalho", height=120, key="etapas")
+    pretende = st.text_area(
+        "20. Pretende (paramétrica, comparar, propor modelo, validar norma...)",
+        height=110,
+        key="pretende",
+    )
 
     st.header("7️⃣ Resultados Esperados")
-    produtos = st.text_area("21. Produtos finais esperados", height=110)
-    contribuicao = st.text_area("22. Contribuição científica principal", height=110)
+    produtos = st.text_area("21. Produtos finais esperados", height=110, key="produtos")
+    contribuicao = st.text_area("22. Contribuição científica principal", height=110, key="contribuicao")
 
     st.header("8️⃣ Cronograma")
     c3, c4, c5 = st.columns(3)
     with c3:
-        duracao = st.text_input("23. Duração prevista (meses)", value="24")
+        duracao = st.text_input("23. Duração prevista (meses)", value=st.session_state.get("duracao", "24"), key="duracao")
     with c4:
-        qualif = st.text_input("24. Qualificação (meses)")
+        qualif = st.text_input("24. Qualificação (meses)", key="qualif")
     with c5:
-        artigo = st.text_input("25. Submeter artigo antes da defesa? (sim/não + quando)")
+        artigo = st.text_input("25. Submeter artigo antes da defesa? (sim/não + quando)", key="artigo")
 
     st.header("9️⃣ Infraestrutura e Viabilidade")
-    conversou = st.text_input("26. Viabilidade com orientador (sim/não + notas)")
-    financiamento = st.text_input("27. Financiamento previsto (bolsa/agência/projeto)")
-    parceria = st.text_input("28. Parceria com empresa?")
+    conversou = st.text_input("26. Viabilidade com orientador (sim/não + notas)", key="conversou")
+    financiamento = st.text_input("27. Financiamento previsto (bolsa/agência/projeto)", key="financiamento")
+    parceria = st.text_input("28. Parceria com empresa?", key="parceria")
 
     st.header("🔟 Diferencial do Candidato")
-    formacao = st.text_area("29. Como sua formação contribui", height=100)
-    skills = st.text_area("30. Como seu conhecimento (Python/métodos numéricos...) agrega", height=100)
-    futuro_ia = st.text_input("31. Integrar IA/modelagem avançada futuramente? (sim/não + como)")
+    formacao = st.text_area("29. Como sua formação contribui", height=100, key="formacao")
+    skills = st.text_area("30. Como seu conhecimento (Python/métodos numéricos...) agrega", height=100, key="skills")
+    futuro_ia = st.text_input("31. Integrar IA/modelagem avançada futuramente? (sim/não + como)", key="futuro_ia")
 
-    enviado = st.form_submit_button("📩 Enviar para a planilha")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        enviado = st.form_submit_button("📩 Enviar para a planilha")
+    with col_btn2:
+        limpar = st.form_submit_button("🗑️ Limpar formulário")
 
-if enviado:
+# -----------------------------
+# ACTIONS
+# -----------------------------
+if "limpar" in locals() and limpar:
+    limpar_formulario()
+    st.rerun()
+
+if "enviado" in locals() and enviado:
     payload = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
-        "titulo": titulo,
-        "orientador": orientador,
-        "area_concentracao": area,
-        "linha_pesquisa": linha,
-        "vinculo_projeto_maior": vinculo,
-        "problema": problema,
-        "relevancia": relevancia,
-        "foco": foco,
-        "foco_outro": foco_outro,
-        "delimitacao": delimitacao,
-        "tipo_estudo": tipo_estudo,
-        "ensaios": ensaios,
-        "laboratorio": laboratorio,
-        "traco_uhpfrc": traco,
-        "software": software,
-        "modelo_constitutivo": modelo_constitutivo,
-        "ml": ml,
-        "artigos_base": artigos_base,
-        "lacuna": lacuna,
-        "origem_tema": origem_tema,
-        "conexao_pesquisas": conexao,
-        "hipotese": hipotese,
-        "objetivo_geral": obj_geral,
-        "objetivos_especificos": obj_especificos,
-        "etapas": etapas,
-        "pretende": pretende,
-        "produtos": produtos,
-        "contribuicao": contribuicao,
-        "duracao_meses": duracao,
-        "qualificacao_meses": qualif,
-        "submissao_artigo": artigo,
-        "viabilidade_orientador": conversou,
-        "financiamento": financiamento,
-        "parceria": parceria,
-        "formacao_contribuicao": formacao,
-        "skills_contribuicao": skills,
-        "futuro_ia": futuro_ia,
+        "titulo": st.session_state.get("titulo", ""),
+        "orientador": st.session_state.get("orientador", ""),
+        "area_concentracao": st.session_state.get("area", ""),
+        "linha_pesquisa": st.session_state.get("linha", ""),
+        "vinculo_projeto_maior": st.session_state.get("vinculo", ""),
+        "problema": st.session_state.get("problema", ""),
+        "relevancia": st.session_state.get("relevancia", ""),
+        "foco": st.session_state.get("foco", []),
+        "foco_outro": st.session_state.get("foco_outro", ""),
+        "delimitacao": st.session_state.get("delimitacao", ""),
+        "tipo_estudo": st.session_state.get("tipo_estudo", ""),
+        "ensaios": st.session_state.get("ensaios", ""),
+        "laboratorio": st.session_state.get("laboratorio", ""),
+        "traco_uhpfrc": st.session_state.get("traco", ""),
+        "software": st.session_state.get("software", ""),
+        "modelo_constitutivo": st.session_state.get("modelo_constitutivo", ""),
+        "ml": st.session_state.get("ml", ""),
+        "artigos_base": st.session_state.get("artigos_base", ""),
+        "lacuna": st.session_state.get("lacuna", ""),
+        "origem_tema": st.session_state.get("origem_tema", ""),
+        "conexao_pesquisas": st.session_state.get("conexao", ""),
+        "hipotese": st.session_state.get("hipotese", ""),
+        "objetivo_geral": st.session_state.get("obj_geral", ""),
+        "objetivos_especificos": st.session_state.get("obj_especificos", ""),
+        "etapas": st.session_state.get("etapas", ""),
+        "pretende": st.session_state.get("pretende", ""),
+        "produtos": st.session_state.get("produtos", ""),
+        "contribuicao": st.session_state.get("contribuicao", ""),
+        "duracao_meses": st.session_state.get("duracao", ""),
+        "qualificacao_meses": st.session_state.get("qualif", ""),
+        "submissao_artigo": st.session_state.get("artigo", ""),
+        "viabilidade_orientador": st.session_state.get("conversou", ""),
+        "financiamento": st.session_state.get("financiamento", ""),
+        "parceria": st.session_state.get("parceria", ""),
+        "formacao_contribuicao": st.session_state.get("formacao", ""),
+        "skills_contribuicao": st.session_state.get("skills", ""),
+        "futuro_ia": st.session_state.get("futuro_ia", ""),
     }
 
     try:
         append_response_to_sheet(payload)
         st.success("✅ Enviado! Sua resposta foi salva na planilha.")
+        # Se você quiser limpar automaticamente também após enviar, descomente:
+        limpar_formulario()
+        st.rerun()
     except Exception as e:
         st.error("❌ Falha ao enviar para a planilha.")
         st.exception(e)
-
-
-
-
-
