@@ -238,6 +238,7 @@ with st.form("form_projeto", clear_on_submit=False):
     futuro_ia = st.text_input("31. Integrar IA/modelagem avançada futuramente? (sim/não + como)")
 
     enviado = st.form_submit_button("📩 Enviar para a planilha")
+    clear_on_submit=True
 
 if enviado:
     payload = {
@@ -287,6 +288,7 @@ if enviado:
     except Exception as e:
         st.error("❌ Falha ao enviar para a planilha.")
         st.exception(e)
+
 
 
 
