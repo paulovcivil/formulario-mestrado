@@ -24,6 +24,16 @@ st.caption("Preencha e clique em **Enviar**. As respostas serão salvas em uma G
 SPREADSHEET_ID = st.secrets.get("SPREADSHEET_ID", "")
 WORKSHEET_NAME = st.secrets.get("WORKSHEET_NAME", "respostas")  # nome da aba
 
+if "form_version" not in st.session_state:
+    st.session_state["form_version"] = 0
+
+def limpar_formulario() -> None:
+    # limpa valores dos widgets
+    for k in FORM_KEYS:
+        st.session_state.pop(k, None)
+    # força recriação do form (zera o estado no frontend)
+    st.session_state["form_version"] += 1
+
 # -----------------------------
 # FORM KEYS (para limpar com segurança)
 # -----------------------------
@@ -189,7 +199,7 @@ focos_lista = [
     "Outro",
 ]
 
-with st.form("form_projeto", clear_on_submit=False):
+with st.form(f"form_projeto_{st.session_state['form_version']}", clear_on_submit=True):
     st.header("1️⃣ Identificação Básica")
     c1, c2 = st.columns(2)
     with c1:
@@ -274,15 +284,14 @@ with st.form("form_projeto", clear_on_submit=False):
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         enviado = st.form_submit_button("📩 Enviar para a planilha")
-    with col_btn2:
-        limpar = st.form_submit_button("🗑️ Limpar formulário")
+   with col_btn2:
+        st.form_submit_button("🗑️ Limpar formulário", on_click=limpar_formulario)
+
 
 # -----------------------------
 # ACTIONS
 # -----------------------------
-if "limpar" in locals() and limpar:
-    limpar_formulario()
-    st.rerun()
+
 
 if "enviado" in locals() and enviado:
     payload = {
@@ -335,3 +344,4 @@ if "enviado" in locals() and enviado:
     except Exception as e:
         st.error("❌ Falha ao enviar para a planilha.")
         st.exception(e)
+
