@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 # CONFIG
 # -----------------------------
 st.set_page_config(page_title="Amor da minha vida <3 <3", layout="wide")
-st.title("📋 Formulário – Projeto de Pesquisa (Mestrado | Poli-USP)")
+st.title("📋 Amor da minha vida <3 <3 <3 <3 ")
 st.caption("Preencha e clique em **Enviar**. As respostas serão salvas em uma Google Sheet.")
 
 # Você vai definir isso via Secrets (recomendado) ou ambiente.
@@ -287,4 +287,5 @@ if enviado:
     except Exception as e:
         st.error("❌ Falha ao enviar para a planilha.")
         st.exception(e)
+
 
